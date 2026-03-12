@@ -78,6 +78,31 @@ const DEFAULT_PICKUP_CAPACITY = 12;
 const DEFAULT_LEAD_TIME_MINUTES = 60;
 const DEFAULT_TAX_RATE = 0.0825;
 
+function getFallbackSquareLocationId(slug: string) {
+  const normalizedSlug = slug.trim().toLowerCase();
+  if (normalizedSlug === 'provo') {
+    return process.env.SQUARE_LOCATION_ID_PROVO ?? process.env.SQUARE_LOCATION_ID ?? '';
+  }
+  if (normalizedSlug === 'orem') {
+    return process.env.SQUARE_LOCATION_ID_OREM ?? process.env.SQUARE_LOCATION_ID ?? '';
+  }
+  return process.env.SQUARE_LOCATION_ID ?? '';
+}
+
+function isReservePickupSlotAmbiguityError(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as { code?: string; message?: string };
+  return (
+    maybeError.code === '42702' &&
+    typeof maybeError.message === 'string' &&
+    maybeError.message.includes('reserved_count') &&
+    maybeError.message.includes('ambiguous')
+  );
+}
+
 function toCents(value: number) {
   return Math.max(0, Math.round(value * 100));
 }
@@ -129,12 +154,18 @@ function parseLocationSetting(raw: unknown): CheckoutLocation[] {
   }
 
   return locations
-    .map((location) => ({
-      slug: String(location.slug ?? ''),
-      name: String(location.name ?? ''),
-      address: String(location.address ?? ''),
-      squareLocationId: String(location.square_location_id ?? ''),
-    }))
+    .map((location) => {
+      const slug = String(location.slug ?? '');
+      const squareLocationId =
+        String(location.square_location_id ?? '').trim() || getFallbackSquareLocationId(slug);
+
+      return {
+        slug,
+        name: String(location.name ?? ''),
+        address: String(location.address ?? ''),
+        squareLocationId,
+      };
+    })
     .filter((location) => location.slug && location.name);
 }
 
@@ -264,6 +295,16 @@ export async function reservePickupSlot(input: {
   });
 
   if (error) {
+    if (isReservePickupSlotAmbiguityError(error)) {
+      console.warn(
+        'reserve_pickup_slot uses a legacy function definition; falling back without reservation. Apply latest Supabase migration to restore capacity enforcement.',
+        error
+      );
+      return {
+        success: true,
+        message: 'reserved_without_db',
+      };
+    }
     throw error;
   }
 

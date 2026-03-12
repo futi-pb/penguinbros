@@ -11,7 +11,6 @@ import {
   type CheckoutPickup,
 } from '@/lib/orders';
 import {
-  createSquareOrder,
   createSquarePaymentLink,
   hasSquareConfig,
   SquareApiError,
@@ -64,6 +63,48 @@ function buildSuccessRedirectUrl(request: NextRequest, orderId: string) {
   const successUrl = new URL('/checkout/success', appBaseUrl);
   successUrl.searchParams.set('orderId', orderId);
   return successUrl.toString();
+}
+
+function normalizePickupTime(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
+    return value.length === 5 ? `${value}:00` : value;
+  }
+
+  const idMatch = value.match(/-(\d{1,2})$/);
+  if (!idMatch) {
+    return null;
+  }
+
+  const hour = Number.parseInt(idMatch[1], 10);
+  if (Number.isNaN(hour) || hour < 0 || hour > 23) {
+    return null;
+  }
+
+  return `${String(hour).padStart(2, '0')}:00:00`;
+}
+
+function toSquarePickupAt(pickupDate: string, pickupTime: string) {
+  const normalizedTime = normalizePickupTime(pickupTime);
+  if (!normalizedTime) {
+    return null;
+  }
+
+  const localDateTime = new Date(`${pickupDate}T${normalizedTime}`);
+  if (Number.isNaN(localDateTime.getTime())) {
+    return null;
+  }
+
+  const utcOffsetMinutes = -localDateTime.getTimezoneOffset();
+  const sign = utcOffsetMinutes >= 0 ? '+' : '-';
+  const absoluteMinutes = Math.abs(utcOffsetMinutes);
+  const offsetHours = String(Math.floor(absoluteMinutes / 60)).padStart(2, '0');
+  const offsetMinutes = String(absoluteMinutes % 60).padStart(2, '0');
+
+  return `${pickupDate}T${normalizedTime}${sign}${offsetHours}:${offsetMinutes}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -135,28 +176,8 @@ export async function POST(request: NextRequest) {
     });
     reserved = true;
 
-    const squareOrder = await createSquareOrder({
-      idempotencyKey,
-      locationId: selectedLocation.squareLocationId,
-      referenceId: `checkout-${Date.now()}`,
-      customerNote: payload.notes ?? null,
-      lineItems: calculation.normalizedItems.map((lineItem) => ({
-        name: lineItem.name,
-        quantity: lineItem.quantity,
-        basePriceMoney: {
-          amount: lineItem.unitPriceCents,
-          currency: calculation.currency,
-        },
-        catalogObjectId: lineItem.squareCatalogObjectId,
-      })),
-      taxes: [
-        {
-          name: 'Sales Tax',
-          percentage: '8.25',
-          scope: 'ORDER',
-        },
-      ],
-    });
+    const pickupAt = toSquarePickupAt(payload.pickup.pickupDate, payload.pickup.pickupTime);
+    const pickupRecipientName = `${payload.customer.firstName} ${payload.customer.lastName}`.trim();
 
     const orderRecord = await persistPendingOrder({
       customer: payload.customer,
@@ -164,7 +185,6 @@ export async function POST(request: NextRequest) {
       location: selectedLocation,
       calculation,
       cartItems: payload.cartItems,
-      squareOrderId: squareOrder.id ?? null,
       idempotencyKey,
       notes: payload.notes ?? null,
     });
@@ -172,13 +192,42 @@ export async function POST(request: NextRequest) {
     const paymentLink = await createSquarePaymentLink({
       idempotencyKey: randomUUID(),
       locationId: selectedLocation.squareLocationId,
-      orderId: squareOrder.id!,
+      order: {
+        location_id: selectedLocation.squareLocationId,
+        reference_id: orderRecord.public_order_id,
+        line_items: calculation.normalizedItems.map((lineItem) => ({
+          name: lineItem.name,
+          quantity: String(lineItem.quantity),
+          catalog_object_id: lineItem.squareCatalogObjectId ?? undefined,
+          base_price_money: {
+            amount: lineItem.unitPriceCents,
+            currency: calculation.currency,
+          },
+        })),
+        taxes: [
+          {
+            name: 'Sales Tax',
+            percentage: '8.25',
+            scope: 'ORDER',
+          },
+        ],
+        fulfillments: [
+          {
+            type: 'PICKUP',
+            pickup_details: {
+              schedule_type: pickupAt ? 'SCHEDULED' : 'ASAP',
+              pickup_at: pickupAt ?? undefined,
+              recipient: {
+                display_name: pickupRecipientName || orderRecord.public_order_id,
+              },
+            },
+          },
+        ],
+        note: payload.notes ?? undefined,
+      },
       checkoutOptions: {
         allowTipping: false,
         redirectUrl: buildSuccessRedirectUrl(request, orderRecord.id),
-      },
-      prePopulatedData: {
-        buyerEmail: payload.customer.email,
       },
       note: `Order ${orderRecord.public_order_id}`,
     });
@@ -187,7 +236,10 @@ export async function POST(request: NextRequest) {
       const supabase = getSupabaseServiceClient();
       await supabase
         .from('orders')
-        .update({ square_checkout_id: paymentLink.id })
+        .update({
+          square_checkout_id: paymentLink.id,
+          square_order_id: paymentLink.orderId ?? null,
+        })
         .eq('id', orderRecord.id);
     }
 
@@ -199,7 +251,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           locationSlug: payload.pickup.locationSlug,
           totalCents: calculation.totalCents,
-          squareOrderId: squareOrder.id ?? null,
+          squareOrderId: paymentLink.orderId ?? null,
           squareCheckoutId: paymentLink.id ?? null,
         },
       });

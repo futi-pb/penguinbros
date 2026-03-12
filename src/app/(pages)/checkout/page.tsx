@@ -17,11 +17,6 @@ const FALLBACK_PICKUP_LOCATIONS: PickupLocation[] = [
     name: 'Provo Store',
     address: '1200 N University Ave, Provo, UT 84604',
   },
-  {
-    slug: 'orem',
-    name: 'Orem Store',
-    address: '800 S State St, Orem, UT 84058',
-  },
 ];
 
 // Available pickup times (generate for the next 7 days)
@@ -65,6 +60,11 @@ const generatePickupTimes = () => {
   
   return times;
 };
+
+function resolveDefaultPickupLocation(locations: PickupLocation[]) {
+  const provoLocation = locations.find((location) => location.slug === 'provo');
+  return provoLocation ?? locations[0] ?? null;
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -155,6 +155,21 @@ export default function CheckoutPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (locationsLoading || pickupLocations.length === 0) {
+      return;
+    }
+
+    const defaultLocation = resolveDefaultPickupLocation(pickupLocations);
+    if (!defaultLocation) {
+      return;
+    }
+
+    if (pickupLocation !== defaultLocation.slug) {
+      setPickupLocation(defaultLocation.slug);
+    }
+  }, [locationsLoading, pickupLocations, pickupLocation]);
+
   // Handle pickup form submission
   const handlePickupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,10 +254,12 @@ export default function CheckoutPage() {
     setContactInfo(prev => ({ ...prev, [name]: value }));
   };
 
+  const defaultPickupLocation = resolveDefaultPickupLocation(pickupLocations);
   const selectedDate = pickupTimes.find((dateOption) => dateOption.dateValue === pickupDate);
   const selectedTimeLabel =
     selectedDate?.timeSlots.find((timeSlot) => timeSlot.id === pickupTime)?.time ?? pickupTime;
-  const selectedLocation = pickupLocations.find((location) => location.slug === pickupLocation);
+  const selectedLocation =
+    pickupLocations.find((location) => location.slug === pickupLocation) ?? defaultPickupLocation;
 
   return (
     <div className="container mx-auto px-4 py-12 pt-[150px]">
@@ -275,33 +292,18 @@ export default function CheckoutPage() {
                 <h2 className="text-xl font-bold mb-4">Pickup Details</h2>
                 
                 <div className="mb-6">
-                  <label className="block text-gray-700 mb-2">Select Location</label>
+                  <label className="block text-gray-700 mb-2">Pickup Location</label>
                   {locationsLoading ? (
                     <p className="text-gray-600">Loading locations...</p>
+                  ) : selectedLocation ? (
+                    <div className="rounded-lg border border-gray-200 bg-isabelline p-4">
+                      <h3 className="font-bold">{selectedLocation.name}</h3>
+                      <p className="text-sm text-gray-600">{selectedLocation.address}</p>
+                    </div>
                   ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {pickupLocations.map(location => (
-                      <div 
-                        key={location.slug}
-                        className={`border rounded-lg p-4 cursor-pointer transition-colors ${pickupLocation === location.slug ? 'border-cherry-pink bg-cherry-pink bg-opacity-5' : 'border-gray-200 hover:border-cherry-pink'}`}
-                        onClick={() => setPickupLocation(location.slug)}
-                      >
-                        <div className="flex items-start">
-                          <div className={`w-5 h-5 rounded-full border flex-shrink-0 mr-3 mt-1 ${pickupLocation === location.slug ? 'border-cherry-pink bg-cherry-pink' : 'border-gray-300'}`}>
-                            {pickupLocation === location.slug && (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                          </div>
-                          <div>
-                            <h3 className="font-bold">{location.name}</h3>
-                            <p className="text-sm text-gray-600">{location.address}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                    <p className="text-sm text-red-600">
+                      Pickup location is not configured. Please contact support.
+                    </p>
                   )}
                 </div>
                 
@@ -325,17 +327,25 @@ export default function CheckoutPage() {
                 {pickupDate && (
                   <div className="mb-6">
                     <label className="block text-gray-700 mb-2">Select Time</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {pickupTimes.find(d => d.date === pickupDate)?.timeSlots.map(slot => (
-                        <div 
-                          key={slot.id}
-                          className={`border rounded-lg p-3 text-center cursor-pointer transition-colors ${pickupTime === slot.id ? 'border-cherry-pink bg-cherry-pink bg-opacity-5' : 'border-gray-200 hover:border-cherry-pink'}`}
-                          onClick={() => setPickupTime(slot.id)}
-                        >
-                          {slot.time}
-                        </div>
-                      ))}
-                    </div>
+                    {pickupTimes.find((d) => d.dateValue === pickupDate)?.timeSlots.length ? (
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                        {pickupTimes
+                          .find((d) => d.dateValue === pickupDate)
+                          ?.timeSlots.map((slot) => (
+                            <div
+                              key={slot.id}
+                              className={`cursor-pointer rounded-lg border p-3 text-center transition-colors ${pickupTime === slot.id ? 'border-cherry-pink bg-cherry-pink bg-opacity-5' : 'border-gray-200 hover:border-cherry-pink'}`}
+                              onClick={() => setPickupTime(slot.id)}
+                            >
+                              {slot.time}
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        No pickup times are available for this date.
+                      </p>
+                    )}
                   </div>
                 )}
                 

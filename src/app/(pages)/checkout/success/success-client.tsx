@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useCart } from '@/context/CartContext';
 
 type OrderStatusResponse = {
   id: string;
@@ -54,11 +55,13 @@ function formatStatus(status: string) {
 }
 
 export default function CheckoutSuccessClient() {
+  const { clearCart } = useCart();
   const searchParams = useSearchParams();
   const orderId = searchParams.get('orderId');
   const [order, setOrder] = useState<OrderStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const cartClearedRef = useRef(false);
 
   useEffect(() => {
     if (!orderId) {
@@ -114,10 +117,13 @@ export default function CheckoutSuccessClient() {
   }, [orderId]);
 
   useEffect(() => {
-    if (order?.payment_status === 'completed') {
+    const paymentConfirmed = order?.payment_status === 'completed' || order?.status === 'paid';
+    if (paymentConfirmed && !cartClearedRef.current) {
+      cartClearedRef.current = true;
+      clearCart();
       localStorage.removeItem('cart');
     }
-  }, [order]);
+  }, [order?.payment_status, order?.status, clearCart]);
 
   const headline = useMemo(() => {
     if (!order) {

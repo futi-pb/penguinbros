@@ -216,6 +216,8 @@ export async function fetchSquareCatalogVariations(): Promise<SquareCatalogVaria
 export type CreateSquareOrderInput = {
   idempotencyKey?: string;
   locationId: string;
+  pickupAt?: string | null;
+  pickupRecipientName?: string | null;
   lineItems: Array<{
     name: string;
     quantity: number;
@@ -274,8 +276,10 @@ export async function createSquareOrder(input: CreateSquareOrderInput) {
           {
             type: 'PICKUP',
             pickup_details: {
+              schedule_type: input.pickupAt ? 'SCHEDULED' : 'ASAP',
+              pickup_at: input.pickupAt ?? undefined,
               recipient: {
-                display_name: input.referenceId,
+                display_name: input.pickupRecipientName ?? input.referenceId,
               },
             },
           },
@@ -294,8 +298,9 @@ export async function createSquareOrder(input: CreateSquareOrderInput) {
 
 export type CreateSquarePaymentLinkInput = {
   idempotencyKey?: string;
-  orderId: string;
+  orderId?: string;
   locationId: string;
+  order?: Record<string, unknown>;
   checkoutOptions?: {
     allowTipping?: boolean;
     redirectUrl?: string;
@@ -321,7 +326,14 @@ export async function createSquarePaymentLink(input: CreateSquarePaymentLinkInpu
       method: 'POST',
       body: JSON.stringify({
         idempotency_key: input.idempotencyKey ?? randomUUID(),
-        order_id: input.orderId,
+        order:
+          input.order ??
+          (input.orderId
+            ? {
+                id: input.orderId,
+                location_id: input.locationId,
+              }
+            : undefined),
         checkout_options: {
           ask_for_shipping_address: false,
           redirect_url: input.checkoutOptions?.redirectUrl,
@@ -340,5 +352,9 @@ export async function createSquarePaymentLink(input: CreateSquarePaymentLinkInpu
     throw new Error('Square payment link creation did not return link details.');
   }
 
-  return response.payment_link;
+  return {
+    id: response.payment_link.id,
+    url: response.payment_link.url,
+    orderId: response.payment_link.order_id ?? null,
+  };
 }
