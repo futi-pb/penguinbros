@@ -1,26 +1,139 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import custom fonts */
+@font-face {
+  font-family: 'Inter';
+  src: url('/assets/Font/Inter/Inter-VariableFont_slnt,wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SF Mono';
+  src: url('/assets/Font/SF Mono/SF-Mono-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'SF Mono';
+  src: url('/assets/Font/SF Mono/SF-Mono-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --foreground: #000000;
+  
+  /* Brand Colors from the provided color scheme */
+  --primary: #ED8E8E;    /* Cherry Blossom Pink */
+  --primary-hover: #E57F7F;
+  --secondary: #7FC8F8;  /* Columbia Blue */
+  --secondary-hover: #6BB4E4;
+  --accent: #F5F5F5;     /* Isabelline */
+  --text: #000000;       /* Black - for text only */
+  --white: #FFFFFF;      /* White */
+  
+  /* Font families */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Standard CSS for layout elements */
+.section-padding {
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+}
+
+.container-custom {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Main content padding for fixed header */
+main {
+  
+}
+
+/* For the hero section, we'll override this in the component */
+.hero-section {
+  padding-top: 0;
+}
+
+/* Button Styles - No Border Radius */
+@layer components {
+  .btn-primary {
+    @apply bg-black text-white px-6 py-2 hover:bg-gray-800 transition-colors flex items-center;
+  }
+
+  .btn-secondary {
+    @apply bg-transparent text-black border border-black px-6 py-2 hover:bg-gray-100 transition-colors flex items-center;
+  }
+
+  .btn-blue {
+    @apply bg-columbia-blue hover:bg-columbia-blue-dark text-white px-6 py-2 font-semibold transition-colors shadow-md;
+  }
+
+  .btn-outline {
+    @apply border border-black text-black px-6 py-2 hover:bg-gray-100 transition-colors flex items-center;
+  }
+
+  .btn-white {
+    @apply bg-white text-black px-6 py-2 hover:bg-gray-100 transition-colors flex items-center;
+  }
+
+  .btn-black {
+    @apply bg-black text-white px-6 py-2 hover:bg-gray-800 transition-colors flex items-center;
+  }
+
+  .btn-sm {
+    @apply px-4 py-2 text-sm;
+  }
+
+  .btn-lg {
+    @apply px-8 py-4 text-lg;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-cherry-pink to-columbia-blue;
+  }
+}
+
+/* Arrow icon for buttons */
+.btn-arrow::after {
+  content: "→";
+  margin-left: 8px;
+}
+
+/* Additional utility classes */
+.hero-gradient {
+  background: linear-gradient(135deg, #FFF5F5 0%, #F0F8FF 100%);
+}
+
+.card-shadow {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Responsive adjustments */
+@media (min-width: 768px) {
+  .section-padding {
+    padding-top: 5rem;
+    padding-bottom: 5rem;
+  }
 }
